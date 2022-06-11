@@ -14,6 +14,7 @@ const sequelize = new Sequelize('database', null, null, {
 
 
 async function __main__ () {
+    /* query object information */
     const tables =  await sequelize.getQueryInterface().showAllSchemas();
     await Promise.all( tables.map( async(table) => {
         const describe = await sequelize.getQueryInterface().describeTable(table.name);
@@ -28,10 +29,35 @@ async function __main__ () {
         return table;
     }));
 
+    // process.env.OUTPUT_DIR = "sinhnn";
+    // const templatePaths = [];
+    const rootDir = process.env.TEMPLATE_DIR ||  "./_templates";
+    function scan_(dir, filter, dest) {
+        for (const file_ of fs.readdirSync(dir, { withFileTypes: true })) {
+            if (file_.isFile() === true) {
+                if (filter(file_)) {
+                    dest.push(path.join(dir, file_.name));
+                }
+            }
+            if (file_.isDirectory() === true) {
+                scan(path.join(dir, file_.name), filter, dest);
+            }
+        }
+        return dest;
+    }
+    
+    function scan(dir, filter) {
+        const dest = [];
+        scan_(dir, filter, dest);
+        return dest;
+    }
+
+    const templatePaths = scan(rootDir, (f) => f.name.match(/\.js$/) !== null);
+    /* working on the template */
     for (const table of tables) {
-        const text = eval(fs.readFileSync('./_templates/entity.js', 'utf-8'));
-        fs.mkdirSync(`generated/models`, {recursive: true, exist: true})
-        fs.writeFileSync(`generated/models/${table.name}.js`, text);
+        for (const template of templatePaths)  {
+            eval(fs.readFileSync(template, 'utf-8'));
+        }
     }
 }
 
