@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const outFilePath = `${process.env.OUTPUT_DIR || "."}/generated/models/${table.name}Entity.js`;
+const outFilePath = `${process.env.OUTPUT_DIR || "./generated"}/${path.dirname(process.env.RELATIVE_TEMPLATE_FILE)}/${table.name}Entity.js`;
 fs.mkdirSync(path.dirname(outFilePath), {recursive: true});
 fs.writeFileSync(outFilePath,
 `class ${table.name}Entity {

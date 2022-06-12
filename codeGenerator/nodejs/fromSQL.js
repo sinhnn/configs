@@ -31,16 +31,19 @@ async function __main__ () {
 
     // process.env.OUTPUT_DIR = "sinhnn";
     // const templatePaths = [];
-    const rootDir = process.env.TEMPLATE_DIR ||  "./_templates";
+    process.env.TEMPLATE_DIR = process.env.TEMPLATE_DIR ||  "./_templates";
     function scan_(dir, filter, dest) {
         for (const file_ of fs.readdirSync(dir, { withFileTypes: true })) {
             if (file_.isFile() === true) {
                 if (filter(file_)) {
                     dest.push(path.join(dir, file_.name));
+                } else {
+                    console.log(dir, file_, 'is invalid');
                 }
             }
             if (file_.isDirectory() === true) {
-                scan(path.join(dir, file_.name), filter, dest);
+                console.log('scanning recursive', file_.name);
+                scan_(path.join(dir, file_.name), filter, dest);
             }
         }
         return dest;
@@ -52,10 +55,11 @@ async function __main__ () {
         return dest;
     }
 
-    const templatePaths = scan(rootDir, (f) => f.name.match(/\.js$/) !== null);
+    const templatePaths = scan(process.env.TEMPLATE_DIR, (f) => f.name.match(/\.js$/) !== null);
     /* working on the template */
     for (const table of tables) {
         for (const template of templatePaths)  {
+            process.env.RELATIVE_TEMPLATE_FILE = path.relative(process.env.TEMPLATE_DIR, template);
             eval(fs.readFileSync(template, 'utf-8'));
         }
     }
