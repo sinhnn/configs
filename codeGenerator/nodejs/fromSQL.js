@@ -12,7 +12,6 @@ const sequelize = new Sequelize('database', null, null, {
     },
 });
 
-
 async function __main__ () {
     /* query object information */
     const tables =  await sequelize.getQueryInterface().showAllSchemas();
@@ -31,7 +30,7 @@ async function __main__ () {
 
     // process.env.OUTPUT_DIR = "sinhnn";
     // const templatePaths = [];
-    process.env.TEMPLATE_DIR = process.env.TEMPLATE_DIR ||  "./_templates";
+    process.env.TEMPLATE_DIR = process.env.TEMPLATE_DIR ||  path.join(__dirname, "./_templates/contoso");
     function scan_(dir, filter, dest) {
         for (const file_ of fs.readdirSync(dir, { withFileTypes: true })) {
             if (file_.isFile() === true) {
@@ -56,6 +55,7 @@ async function __main__ () {
     }
 
     const templatePaths = scan(process.env.TEMPLATE_DIR, (f) => f.name.match(/\.js$/) !== null);
+    process.env.OUT_DIR = 'generated/Consoto';
     /* working on the template */
     for (const table of tables) {
         for (const template of templatePaths)  {
@@ -64,6 +64,4 @@ async function __main__ () {
         }
     }
 }
-
-
 __main__();
