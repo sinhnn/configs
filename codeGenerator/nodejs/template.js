@@ -41,6 +41,7 @@ function scan(dir, filter) {
                 'path': slash(path.relative(dir, p)),
                 'dirname': slash(path.dirname(p)),
                 'filename': path.basename(p),
+                'isTemplate': p.search(/\.template\.js$/) >=0 ,
                 'extension': p.split('.').pop()
             }
         }) 
@@ -71,8 +72,8 @@ module.exports = class Template {
         for (const template of this.projectTemplate_)  {
             const generatedFileConfig = template;
             
-            if (template.extension === 'js') {
-                generatedFileConfig.outFilePath = slash(path.join(outputDir, template.path.replace(/\.js$/, '') + "." + this.extension_));
+            if (template.isTemplate) {
+                generatedFileConfig.outFilePath = slash(path.join(outputDir, template.path.replace(/\.template\.js$/, '') + "." + this.extension_));
                 generatedFileConfig.outFilePathWoExt = generatedFileConfig.outFilePath.replace(/\.js$/, '');
                 generatedFileConfig.outDirPath = slash(path.join(outputDir, path.dirname(template.path)));
                 fs.mkdirSync(generatedFileConfig.outDirPath, {recursive: true});
