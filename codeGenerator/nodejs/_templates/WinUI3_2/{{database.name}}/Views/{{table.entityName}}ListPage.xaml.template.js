@@ -177,7 +177,9 @@
                 <toolkit:DataGrid.Columns>${table.fields.filter(f => f.dstLangType !== "byte[]").filter(f => f.IsVisible !== false).map(field => {
                     return `
                     <toolkit:DataGridTemplateColumn 
-                        Tag="${field.classMemberName}" IsReadOnly="${field.IsReadOnly === true ? 'True' : 'False'}"
+                        Tag="${field.classMemberName}"
+                        IsReadOnly="${field.IsReadOnly === true ? 'True' : 'False'}"
+                        ClipboardContentBinding="{Binding ${field.classMemberName}}"
                         Header="${field.humanReadableName || field.classMemberName.UpperCaseToHumanName()}">
                         <toolkit:DataGridTemplateColumn.HeaderStyle>
                             <Style TargetType="controls:DataGridColumnHeader">
