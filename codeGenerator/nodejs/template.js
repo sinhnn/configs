@@ -1,9 +1,13 @@
 const fs = require('fs');
 const path = require('path');
 const slash = require('slash');
-const fsCustom = require('./fsCustom');
+const Mustache = require('mustache');
+const _ = require('lodash');
+
+const fsCustom_ = require('./fsCustom');
 // const log4js = require('log4js');
 const winston = require('winston');
+const { table } = require('console');
 const logger = winston.createLogger({
     format: winston.format.combine(
         winston.format.colorize(),
@@ -49,9 +53,8 @@ function scan(dir, filter) {
 
 
 module.exports = class Template {
-    constructor (projectTemplateDirectory, targetFileExtension) {
+    constructor (projectTemplateDirectory) {
         this.root_ = projectTemplateDirectory;
-        this.extension_ = targetFileExtension;
         this.projectTemplate_ = undefined;
     }
 
@@ -61,34 +64,80 @@ module.exports = class Template {
         return this.projectTemplate_;
     }
 
+    preprocess (templateFilePath, context)
+    {
+        // Get all valid variables in template file path
+        const alls = [];
+        for (const database of context.databases)
+        {
+            for (const table of database.tables)
+            {
+                const _context = {
+                    'database': database,
+                    'table': table,
+                    'databases': context.databases,
+                    'projectName': context.projectName
+                };
+                alls.push({
+                    'templateFilePath': slash(path.join(this.root_, templateFilePath)),
+                    'outFilePath': Mustache.render(templateFilePath.replace('.template.js', ''), _context),
+                    'context': _context
+                });
+            }
+        }
+        return alls;
+    }
+
     template() { return this.projectTemplate_ };
+
     /**
      * 
      * @param {string} outputDir 
-     * @param {object} tables   store information to generates 
+     * @param {object} databases   store information to generates 
      */
-    generate (outputDir, tables) {
-        const projectOutputDir = outputDir;
-        for (const template of this.projectTemplate_)  {
-            const generatedFileConfig = template;
-            
-            if (template.isTemplate) {
-                generatedFileConfig.outFilePath = slash(path.join(outputDir, template.path.replace(/\.template\.js$/, '') + "." + this.extension_));
-                generatedFileConfig.outFilePathWoExt = generatedFileConfig.outFilePath.replace(/\.js$/, '');
-                generatedFileConfig.outDirPath = slash(path.join(outputDir, path.dirname(template.path)));
-                fs.mkdirSync(generatedFileConfig.outDirPath, {recursive: true});
-                logger.info(`Executing template file ${template.path}`);
-                eval(fs.readFileSync(template.absolute, 'utf-8'));;
-            } else {
-                generatedFileConfig.outFilePath = slash(path.join(outputDir, template.path));
-                generatedFileConfig.outFilePathWoExt = generatedFileConfig.outFilePath.replace(/\.js$/, '');
-                generatedFileConfig.outDirPath = slash(path.join(outputDir, path.dirname(template.path)));
-                fs.mkdirSync(generatedFileConfig.outDirPath, {recursive: true});
-                logger.info(`Copying template file ${template.path}`);
-                fs.copyFile(template.absolute, generatedFileConfig.outFilePath, (err) => {
-                    if (err) throw err;
-                });
+    generate (databases, options) {
+        console.log(this.projectTemplate_);
+        const projectName = options.projectName;
+
+        function render (info, options, overwrite=false)
+        {
+            console.log(arguments);
+            const context = info.context;
+            const namespace_ = [options.projectName];
+            const tmp = slash(path.join(options.outputDir, path.dirname(info.outFilePath))).split('/').filter(e => e);
+            namespace_.push(...tmp);
+            context.namespace = (namespace_.filter(f => f).join(".")).split(".").filter(f => f).join(".");
+            const output = path.join(options.projectDirectory, options.outputDir, info.outFilePath);
+
+            if (fs.existsSync(output) && overwrite === false) 
+            {
+                logger.warn(`${output} is already exist! Ignored.`)
             }
+            else
+            {
+                // const projectName = options.projectName;
+                const table = info.context.table;
+                const tables = info.context.database.tables;
+                const database = info.context.database;
+                const databases = info.context.databases;
+                const text = eval(fs.readFileSync(info.templateFilePath, 'utf-8'));
+                fs.mkdirSync(path.dirname(output), {recursive: true});
+                fs.writeFileSync(output, text);
+            }
+        }
+
+        // console.log(allTableContext);
+        const alls = [];
+        for (const template of this.projectTemplate_)  {
+            alls.push(...this.preprocess(template.path, {
+                    'databases': databases,
+                    'projectName': options.projectName
+                }
+            ));
+        }
+        for (const f of _.uniqBy(alls, 'outFilePath'))
+        {
+            render(f, options, options.overwrite);
         }
     }
 }
