@@ -16,17 +16,12 @@
 
     <Page.Resources>
         <MenuFlyout x:Key="DataGridContextMenu">
+            ${table.contextMenu.map(m => `
             <MenuFlyoutItem
-                Click="ViewDetails_Click"
-                Text="View details"
-                Icon="OpenFile">
-            </MenuFlyoutItem>
-
-            <MenuFlyoutItem
-	            Click="Open${table.entityName}_Click"
-	            Text="Open ${table.entityName}"
-	            Icon="OpenFile">
-			</MenuFlyoutItem>
+                Click="${m.name.ToCapitalizeCase()}_Click"
+                Text="${m.name}"
+                Icon="${m.icon}">
+            </MenuFlyoutItem>`).join("")}
         </MenuFlyout>
     </Page.Resources>
 
@@ -118,7 +113,6 @@
                     ItemsSource="{x:Bind ViewModel.FilteredList}"
                     SelectedItem="{x:Bind ViewModel.SelectedItem, Mode=TwoWay}"
                     SelectionMode="Extended"
-                    IsReadOnly="True"
                     KeyDown="DataGrid_KeyDown"
                     RightTapped="DataGrid_RightTapped"
                     DoubleTapped="DataGrid_DoubleTapped"
