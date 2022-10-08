@@ -2,7 +2,10 @@ const fs = require('fs');
 const path = require('path');
 const slash = require('slash');
 const Mustache = require('mustache');
+const os = require('os');
 const _ = require('lodash');
+const {include} = require("./utils.js");
+
 
 const fsCustom_ = require('./fsCustom');
 // const log4js = require('log4js');
@@ -18,19 +21,38 @@ const logger = winston.createLogger({
       new winston.transports.Console(),
     ]
 });
-function scan_(dir, filter, dest) {
-    for (const file_ of fs.readdirSync(dir, { withFileTypes: true })) {
-        if (file_.isFile() === true) {
-            if (filter(file_)) {
-                dest.push(slash(path.join(dir, file_.name)));
-            } else {
-                logger.warn(dir, file_, 'is not template file.');
+
+/**
+ * 
+ * @param {string} dir template directory 
+ * @param {function} filter custom filter to add/ignore template files/folders
+ * @param {List<string>} dest list of file will be generate
+ * @returns 
+ */
+function scan_(rootdir, curdir, filter, dest) {
+    for (const file_ of fs.readdirSync(path.join(rootdir, curdir), { withFileTypes: true }))
+    {
+        // relative path to project
+        file_.relativePathToTemplateDir = slash(path.normalize(path.join(curdir, file_.name)));
+
+        if (filter(file_))
+        {
+            if (file_.isFile() === true)
+            {
+                if (filter(file_))
+                {
+                    dest.push(slash(path.join(rootdir, curdir, file_.name)));
+                }
+                else
+                {
+                    logger.warn(curdir, file_, 'is not template file.');
+                }
             }
-        }
-        if (file_.isDirectory() === true) {
-            const subdir = slash(path.join(dir, file_.name));
-            logger.info(`scanning subdirectory ${subdir}`);
-            scan_(subdir, filter, dest);
+            if (file_.isDirectory() === true) {
+                const subdir = slash(path.join(curdir, file_.name));
+                logger.info(`scanning subdirectory ${subdir}`);
+                scan_(rootdir, subdir, filter, dest);
+            }
         }
     }
     return dest;
@@ -38,17 +60,38 @@ function scan_(dir, filter, dest) {
 
 function scan(dir, filter) {
     const dest = [];
-    scan_(dir, filter, dest);
-    return dest.map(p => {
+    
+    let ignores = [];
+    const ignoreConfigFile = path.join(dir, 'template.ignores');
+    if (fs.existsSync(ignoreConfigFile) == true)
+    {
+        ignores = fs.readFileSync(ignoreConfigFile, 'utf-8').split('\n').map(l => l.trim()).filter(l => l).map(l => new RegExp('^' + l));
+    }
+    console.log(ignores);
+
+    const filters = (file_) =>
+    {
+        let s = ignores.findIndex(regex => file_.relativePathToTemplateDir.search(regex) === 0);
+        if (s >= 0)
+        {
+            logger.info("ignore file " + JSON.stringify(file_));
+            return false;
+        }
+        return filter(file_);
+    }
+
+    scan_(dir, '.', filters, dest);
+    let ret = dest.map(p => {
             return {
-                'absolute': slash(path.resolve(p)),
-                'path': slash(path.relative(dir, p)),
+                'absolute': slash((path.resolve(p))),
+                'path': slash((path.relative(dir, p))),
                 'dirname': slash(path.dirname(p)),
                 'filename': path.basename(p),
                 'isTemplate': p.search(/\.template\.js$/) >=0 ,
                 'extension': p.split('.').pop()
             }
-        }) 
+        }); // .filter(f => ignores.find(regex => f.path.match(regex)) === undefined);
+    return ret;
 }
 
 
@@ -96,33 +139,50 @@ module.exports = class Template {
      * @param {object} databases   store information to generates 
      */
     generate (databases, options) {
-        console.log(this.projectTemplate_);
         const projectName = options.projectName;
-
         function render (info, options, overwrite=false)
         {
-            console.log(arguments);
+            // console.dir(arguments, {depth: null});
             const context = info.context;
             const namespace_ = [options.projectName];
             const tmp = slash(path.join(options.outputDir, path.dirname(info.outFilePath))).split('/').filter(e => e);
             namespace_.push(...tmp);
             context.namespace = (namespace_.filter(f => f).join(".")).split(".").filter(f => f).join(".");
-            const output = path.join(options.projectDirectory, options.outputDir, info.outFilePath);
 
+            const output = path.join(options.projectDirectory, options.outputDir, info.outFilePath);
+            global.context = context;
             if (fs.existsSync(output) && overwrite === false) 
             {
                 logger.warn(`${output} is already exist! Ignored.`)
+                return {'output': output, 'rendered': 'ignore'};
             }
             else
             {
+                logger.info(`rendering ${output} from ${info.templateFilePath}`);
                 // const projectName = options.projectName;
+                const namespace = context.namespace;
+                const classname = path.basename(output).split(".")[0];
+                const classpath = [namespace, classname].join(".");
+                const entity = info.context.table.entity;
                 const table = info.context.table;
                 const tables = info.context.database.tables;
                 const database = info.context.database;
                 const databases = info.context.databases;
-                const text = eval(fs.readFileSync(info.templateFilePath, 'utf-8'));
                 fs.mkdirSync(path.dirname(output), {recursive: true});
-                fs.writeFileSync(output, text);
+
+                if (info.templateFilePath.includes(".template.js"))
+                {
+                    const text = eval(fs.readFileSync(info.templateFilePath, 'utf-8'));
+                    fs.writeFileSync(output, text);
+                    return {'output': output, 'rendered': 'templated'};
+
+                }
+                else
+                {
+                    fs.copyFileSync(info.templateFilePath, output);
+                    return {'output': output, 'rendered': 'copy'};
+
+                }
             }
         }
 
@@ -135,9 +195,20 @@ module.exports = class Template {
                 }
             ));
         }
+
+        const results = [];
         for (const f of _.uniqBy(alls, 'outFilePath'))
         {
-            render(f, options, options.overwrite);
+            // try
+            // {
+                results.push(render(f, options, options.overwrite));
+            // }
+            // catch (err)
+            // {
+            //     logger.warn(`${output} is already exist! Ignored.`)
+            //     console.error("failed to generate", f.templateFilePath);
+            // }
         }
+        console.table(results);
     }
 }

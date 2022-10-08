@@ -38,8 +38,22 @@ String.prototype.ParentNamespace = function (depth)
     return this.split('.').slice(0, -depth).join(".");
 }
 
-const fsCustom = require('./fsCustom');
+Object.prototype.ClassMemberName = function ()
+{
+    return this.classMemberName || this.name.toString().ToClassMemberName();
+}
 
+Object.prototype.VariableName = function ()
+{
+    return this.variableName || this.name.ToVariableName();
+}
+
+Object.prototype.ViewModelName = function ()
+{
+    return this.viewModleName || this.name.ToClassMemberName() + "ViewModel";
+}
+
+const fsCustom = require('./fsCustom');
 async function readDatabaseInfo(sqliteFilePath, options)
 {
     const sequelize = new Sequelize('database', null, null, {
@@ -56,57 +70,40 @@ async function readDatabaseInfo(sqliteFilePath, options)
 
     await Promise.all(tables.map( async(table) => {
         const describe = await sequelize.getQueryInterface().describeTable(table.name);
+        
+
         if (table.name[table.name.length - 1] === 's') {
             table.codeName = table.name.ToCapitalizeCase();
         } else {
             table.codeName = table.name.ToCapitalizeCase() + 's';
         }
 
-        table.entityName = table.codeName.slice(0, -1) + "Entity";
-        table.entityVariableName = table.entityName.ToVariableName();
-        // table.entityVariableName = table.entityName.toLowerCase();
+        table.entity = {
+            'name': table.codeName.slice(0, -1),
+        }
 
+        table.entityName = table.codeName.slice(0, -1);
+        table.indexes = await sequelize.getQueryInterface().showIndex(table.name);
         table.fields = []; 
         // table.fieldNames = [];
         for(const field of Object.keys(describe)) {
             const f = describe[field];
-            f.Name = field;
-            f.classMemberName = f.Name.ToClassMemberName();
-            f.variableName = f.Name.ToVariableName();
+            f.name = field;
             f.destLangType = f.allowNull && kSqliteType_To_CStype[f.type] !== "string" ? `${kSqliteType_To_CStype[f.type]}?` : kSqliteType_To_CStype[f.type];
-            f.IsReadOnly = false;
-            f.humanReadableName = f.classMemberName.UpperCaseToHumanName()
-            f.IsMapped = true;
-            f.IsVisible = !f.destLangType.includes("byte");
-            // table.fieldNames.push(field); // as shortcut path in templates
+            f.isReadOnly = false;
+            f.humanReadableName = f.ClassMemberName().UpperCaseToHumanName()
+            f.isMapped = true;
+            f.isVisible = !f.destLangType.includes("byte");
             table.fields.push(f);
-            console.log(f);
         }
 
-        // table.identifyByFields = table.fields.filter(f => f.primaryKey === true).map(f => f.Name);
-        // if (table.identifyByFields.length > 1) {
-        //     table.identifyByFields = table.fields.map(f => f.Name);
-        // }
-        // Add formatted info of all bytes
-        table.fields.filter(field => field.destLangType.includes("byte")).map(field => {
-            const formattedField = {};
-            formattedField.Name = field.Name + "Formatted";
-            formattedField.classMemberName = formattedField.Name.ToClassMemberName();
-            formattedField.variableName = formattedField.Name.ToVariableName();
-            formattedField.destLangType = "string";
-            formattedField.humanReadableName = formattedField.classMemberName.UpperCaseToHumanName()
-            formattedField.IsVisible = true;
-            formattedField.IsReadOnly = false;
-            formattedField.IsNotMapped = true;
-            table.fields.push(formattedField);
-        })
-
+        table.primaryKeysOrUniqueIndex = table.fields.find(f => f.isPrimary) ? table.fields.filter(f => f.isPrimary) : table.indexes.find(f => f.unique).fields.map(f => table.fields.find(ff => ff.name  == f.attribute));
         return table;
     }));
     const databaseContext =     {
-        'name': path.basename(sqliteFilePath).replace(/ /g, '').replace(/\..*$/, '') + "Db", 
+        'name': path.basename(sqliteFilePath).replace(/ /g, '').replace(/\..*$/, ''), // + "Db", 
         'tables': tables, 
-        'source': sqliteFilePath,
+        'source': slash(sqliteFilePath),
         'type': 'Database'
     }    
     return databaseContext;
@@ -129,8 +126,9 @@ async function __main__ () {
         .option('--project-name <PROJECT_NAME>', 'The name of project.')
         .option('-t, --table [TABLE_NAME...]', 'The directory to put files in. Paths are relative to the project directory.')
         .option('-n, --namespace [NAMESPACE...]', 'The namespace to use. Matches the directory by default.')
-        .option('--export-json [JSON_FILE]', 'Export database to json file.')
-        .option('--import-json [JSON_FILE]', 'User database information from json file.')
+        .option('--export-json [JSON_FILE]', 'Export database to JSON file.')
+        .option('--import-json [JSON_FILE]', 'User database information from JSON file.')
+        .option('--import-js [JS_FILE]', 'Import project information from JS file.')
         .option('--context-namespace [NAMESPACE...]', 'The namespace to use. Matches the directory by default.')
         .option('--parent-namespace [NAMESPACE...]', 'The parent namespace to use.')
         .option('--skip', 'Skip generating code.')
@@ -138,11 +136,24 @@ async function __main__ () {
         .option('--merge', 'Merge to current json file')
         .option('--overwrite', 'Merge to current json file')
         .parse(process.argv);
-    const options = program.opts();
 
+    const options = program.opts();
     const sqliteFilePath = program.args[0];
     const templatePath = program.args[1];
-    databaseContext = options.importJson ? JSON.parse(fs.readFileSync(sqliteFilePath, 'utf-8')) : [(await readDatabaseInfo(sqliteFilePath, options))];
+
+    if (options.importJson)
+    {
+        databaseContext = JSON.parse(fs.readFileSync(sqliteFilePath, 'utf-8'));
+    }
+    else if (options.importJs)
+    {
+        databaseContext = require(sqliteFilePath);
+    }
+    else
+    {
+        databaseContext = [(await readDatabaseInfo(sqliteFilePath, options))]
+    }
+
     console.dir(databaseContext, {depth: null});
     if (options.exportJson) {
         if (options.merge && fs.existsSync(options.exportJson))
@@ -155,7 +166,6 @@ async function __main__ () {
             }
         }
         fs.writeFileSync(options.exportJson, JSON.stringify(databaseContext, null, 2));
-
         for (const database of databaseContext)
         {
             for (const table of database.tables)
