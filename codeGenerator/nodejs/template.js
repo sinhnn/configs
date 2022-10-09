@@ -5,10 +5,8 @@ const Mustache = require('mustache');
 const os = require('os');
 const _ = require('lodash');
 const {include} = require("./utils.js");
-
-
 const fsCustom_ = require('./fsCustom');
-// const log4js = require('log4js');
+
 const winston = require('winston');
 const { table } = require('console');
 const logger = winston.createLogger({
@@ -58,9 +56,16 @@ function scan_(rootdir, curdir, filter, dest) {
     return dest;
 }
 
+/**
+ * 
+ * @param {string} dir  template directory path 
+ * @param {functor} filter  filter function
+ * @returns 
+ */
 function scan(dir, filter) {
     const dest = [];
     
+    // Load ignores from template configure file
     let ignores = [];
     const ignoreConfigFile = path.join(dir, 'template.ignores');
     if (fs.existsSync(ignoreConfigFile) == true)
@@ -90,7 +95,7 @@ function scan(dir, filter) {
                 'isTemplate': p.search(/\.template\.js$/) >=0 ,
                 'extension': p.split('.').pop()
             }
-        }); // .filter(f => ignores.find(regex => f.path.match(regex)) === undefined);
+        });
     return ret;
 }
 
@@ -102,7 +107,6 @@ module.exports = class Template {
     }
 
     load () {
-        // this.projectTemplate_ = scan(this.root_,  (f) => f.name.match(/\.js$/) !== null);
         this.projectTemplate_ = scan(this.root_,  (f) => true);
         return this.projectTemplate_;
     }
@@ -142,7 +146,6 @@ module.exports = class Template {
         const projectName = options.projectName;
         function render (info, options, overwrite=false)
         {
-            // console.dir(arguments, {depth: null});
             const context = info.context;
             const namespace_ = [options.projectName];
             const tmp = slash(path.join(options.outputDir, path.dirname(info.outFilePath))).split('/').filter(e => e);
@@ -159,7 +162,6 @@ module.exports = class Template {
             else
             {
                 logger.info(`rendering ${output} from ${info.templateFilePath}`);
-                // const projectName = options.projectName;
                 const namespace = context.namespace;
                 const classname = path.basename(output).split(".")[0];
                 const classpath = [namespace, classname].join(".");
@@ -199,15 +201,7 @@ module.exports = class Template {
         const results = [];
         for (const f of _.uniqBy(alls, 'outFilePath'))
         {
-            // try
-            // {
-                results.push(render(f, options, options.overwrite));
-            // }
-            // catch (err)
-            // {
-            //     logger.warn(`${output} is already exist! Ignored.`)
-            //     console.error("failed to generate", f.templateFilePath);
-            // }
+            results.push(render(f, options, options.overwrite));
         }
         console.table(results);
     }

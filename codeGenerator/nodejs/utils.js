@@ -4,7 +4,7 @@ const { parse } = require('csv-parse/sync');
 
 function readCsv (filePath)
 {
-    return parse(fs.readFileSync(filePath), {
+    return parse(fs.readFileSync(filePath, 'utf-8'), {
         columns: true,
         skip_empty_lines: true,
         auto_cast: true,
@@ -14,7 +14,7 @@ function readCsv (filePath)
 }
 
 function readJson(filePath) {
-    return JSON.parse(fs.readFileSync(filePath));
+    return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
 }
 
 function include (filePath)
@@ -27,13 +27,18 @@ function include (filePath)
             return readJson(filePath);
             break;
         case ".js":
-            return require(filePath);
+            // return require(filePath);
+            return eval(fs.readFileSync(filePath, 'utf-8'));
             break;
-        default:
+        case ".txt":
+            // return fs.readFileSync(filePath, 'utf-8');
+        default: // allow any file type
+            return fs.readFileSync(filePath, 'utf-8');
             throw new Error("unsupported file format " + filePath);
             break;
     }
 }
+
 
 module.exports = {
     "include": include
