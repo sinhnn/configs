@@ -1,1 +1,0 @@
- https://github.com/microsoft/Windows-appsample-customers-orders-database
